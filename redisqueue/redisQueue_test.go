@@ -89,12 +89,15 @@ func TestRedisQueue(t *testing.T) {
 		element2 = &Element{}
 		err = queue.Pop(element2)
 		So(err, ShouldBeNil)
+		So(element2.GetID(), ShouldEqual, "")
 
-		<-time.After(30 * time.Second)
+		<-time.After(35 * time.Second)
 		var element3 QueueElement
 		element3 = &Element{}
 		err = queue.Pop(element3)
 		So(err, ShouldBeNil)
 		So(element3.GetID(), ShouldEqual, "bbb")
+		err = queue.Ack(element3)
+		So(err, ShouldBeNil)
 	})
 }

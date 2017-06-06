@@ -2,7 +2,6 @@ package redisqueue
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -55,7 +54,8 @@ func (r *RedisQueue) buildQueuePrefix() string {
 }
 
 func buildSession(id string) string {
-	return id + "|" + strconv.Itoa(int(time.Now().UnixNano()))
+	//return id + "|" + strconv.Itoa(int(time.Now().UnixNano()))
+	return id + "|session"
 }
 
 func extractIDFromSession(session string) (string, error) {
