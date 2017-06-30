@@ -37,12 +37,14 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 		DB:       0,
 	})
 	id := uuid.NewUUID().String()
-	return &RedisQueue{
+	queue := &RedisQueue{
 		client:     client,
 		id:         id,
 		timeoutVal: time.Duration(30) * time.Second,
 		retryTimes: 3,
 	}
+	go queue.init()
+	return queue
 }
 
 func (r *RedisQueue) buildElementPrefix() string {
@@ -51,6 +53,15 @@ func (r *RedisQueue) buildElementPrefix() string {
 
 func (r *RedisQueue) buildQueuePrefix() string {
 	return r.id + ":queue"
+}
+
+func (r *RedisQueue) init() {
+	// Remove all unacked elements, they will be recovered from meta info.
+	result := r.client.Del(r.buildElementPrefix())
+	err := result.Err()
+	if err != nil {
+		log.Error(err)
+	}
 }
 
 func buildSession(id string) string {
@@ -93,8 +104,6 @@ func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool) {
 }
 
 func (r *RedisQueue) Push(e pq.QueueElement) error {
-	log.Debug(e.GetScore())
-	log.Debug(e.GetID())
 	result := r.client.ZAdd(r.buildQueuePrefix(), redis.Z{
 		Score:  e.GetScore(),
 		Member: e.GetID(),
@@ -127,6 +136,7 @@ func (r *RedisQueue) Pop(element pq.QueueElement) error {
 	pipe := r.client.TxPipeline()
 	pipe.ZRemRangeByRank(r.buildQueuePrefix(), 0, 0)
 	pipe.HSetNX(r.buildElementPrefix(), session, 0)
+	pipe.Expire(r.buildElementPrefix(), 24*time.Hour)
 	pipe.HIncrBy(r.buildElementPrefix(), session, 1)
 	_, err = pipe.Exec()
 	if err != nil {
