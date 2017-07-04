@@ -13,8 +13,8 @@ var (
 type Element struct {
 	id         string
 	session    string
-	Priority   int
-	CreateTime int64
+	Priority   int   `json:"priority"`
+	CreateTime int64 `json:"createTime"`
 }
 
 func (e *Element) GetID() string {
@@ -34,7 +34,8 @@ func (e *Element) SetSession(session string) {
 }
 
 func (e *Element) GetScore() float64 {
-	return float64(1000)
+	score := int64(e.Priority) * (e.CreateTime - pivotTime)
+	return float64(score)
 }
 
 func NewElement() pq.QueueElement {
