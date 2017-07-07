@@ -21,6 +21,7 @@ var (
 
 type RedisQueueConfig struct {
 	Addr string
+	ID   string
 }
 
 type RedisQueue struct {
@@ -37,13 +38,18 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 		DB:       0,
 	})
 	id := uuid.NewUUID().String()
+	if config.ID != "" {
+		id = config.ID
+	}
 	queue := &RedisQueue{
 		client:     client,
 		id:         id,
 		timeoutVal: time.Duration(30) * time.Second,
 		retryTimes: 3,
 	}
-	go queue.init()
+	if config.ID == "" {
+		go queue.init()
+	}
 	return queue
 }
 
@@ -56,7 +62,7 @@ func (r *RedisQueue) buildQueuePrefix() string {
 }
 
 func (r *RedisQueue) init() {
-	// Remove all unacked elements, they will be recovered from meta info.
+	// Recover all unacked elements from redis when in single server mode.
 	result := r.client.Del(r.buildElementPrefix())
 	err := result.Err()
 	if err != nil {
@@ -65,7 +71,6 @@ func (r *RedisQueue) init() {
 }
 
 func buildSession(id string) string {
-	//return id + "|" + strconv.Itoa(int(time.Now().UnixNano()))
 	return id + "|session"
 }
 
@@ -79,12 +84,24 @@ func extractIDFromSession(session string) (string, error) {
 }
 
 func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool) {
+	timeout := e.GetTimeout()
+	if r.timeoutVal.Nanoseconds() > e.GetTimeout() {
+		timeout = r.timeoutVal.Nanoseconds()
+	}
 	select {
-	case <-time.After(r.timeoutVal):
-		result1 := r.client.HGet(r.buildElementPrefix(), e.GetSession())
+	case <-time.After(time.Duration(timeout) * time.Nanosecond):
+		// Close channel
+		close(c)
+		session := e.GetSession()
+		if cancelChannelMap[session] != nil {
+			delete(cancelChannelMap, session)
+		}
+		// Re-push element to the queue
+		result1 := r.client.HGet(r.buildElementPrefix(), session)
 		err := result1.Err()
 		if err != nil {
 			log.Error(err)
+			// Element already acked by other client, just ignore.
 			return
 		}
 		times, err := result1.Int64()
@@ -150,8 +167,7 @@ func (r *RedisQueue) Pop(element pq.QueueElement) error {
 	return nil
 }
 
-func (r *RedisQueue) Ack(e pq.QueueElement) error {
-	session := e.GetSession()
+func (r *RedisQueue) Ack(session string) error {
 	result := r.client.HDel(r.buildElementPrefix(), session)
 	err := result.Err()
 	if err != nil {
@@ -163,4 +179,19 @@ func (r *RedisQueue) Ack(e pq.QueueElement) error {
 		delete(cancelChannelMap, session)
 	}
 	return nil
+}
+
+func (r *RedisQueue) GetRetryTimes(session string) (int, error) {
+	result := r.client.HGet(r.buildElementPrefix(), session)
+	err := result.Err()
+	if err != nil {
+		log.Error(err)
+		return 0, errRedis
+	}
+	times, err := result.Int64()
+	if err != nil {
+		log.Error(err)
+		return 0, errParse
+	}
+	return int(times), nil
 }

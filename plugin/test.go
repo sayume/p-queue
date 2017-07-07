@@ -29,7 +29,7 @@ func main() {
 
 	taskMeta := &TaskMeta{
 		Priority:   1,
-		CreateTime: time.Now().UnixNano(),
+		CreateTime: time.Now().UnixNano(),j
 	}
 	data, err := json.Marshal(taskMeta)
 	if err != nil {
