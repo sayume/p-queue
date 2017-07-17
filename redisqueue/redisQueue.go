@@ -41,14 +41,12 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 	if config.ID != "" {
 		id = config.ID
 	}
+	id = uuid.New()
 	queue := &RedisQueue{
 		client:     client,
 		id:         id,
 		timeoutVal: time.Duration(30) * time.Second,
 		retryTimes: 3,
-	}
-	if config.ID == "" {
-		go queue.init()
 	}
 	return queue
 }
@@ -59,15 +57,6 @@ func (r *RedisQueue) buildElementPrefix() string {
 
 func (r *RedisQueue) buildQueuePrefix() string {
 	return r.id + ":queue"
-}
-
-func (r *RedisQueue) init() {
-	// Recover all unacked elements from redis when in single server mode.
-	result := r.client.Del(r.buildElementPrefix())
-	err := result.Err()
-	if err != nil {
-		log.Error(err)
-	}
 }
 
 func buildSession(id string) string {
