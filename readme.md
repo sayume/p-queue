@@ -21,3 +21,7 @@ These are the features we now supported:
 2) When pop, we pop the element with the lowest score.
 
 3) A element can be acknowledged, in case it is lost by client, and after a period of time, it can get by client again.
+
+# How to implement custom score method?
+
+Read the example code in plugin/strategy.go file. Add the properties which needed in Element class, then write the function GetScore() to implement the score algorithm of your own.
