@@ -16,19 +16,23 @@ var (
 	errRedis         = errors.New("Fail to manipulate redis store.")
 	errParseSession  = errors.New("Invalid session.")
 	errParse         = errors.New("Parse data type error.")
+	errQueueFull     = errors.New("Queue is full.")
 	cancelChannelMap = make(map[string](chan bool))
 )
 
 type RedisQueueConfig struct {
-	Addr string
-	ID   string
+	Addr      string
+	ID        string
+	MaxLength int
 }
 
 type RedisQueue struct {
+	config     *RedisQueueConfig
 	client     *redis.Client
 	id         string
 	timeoutVal time.Duration
 	retryTimes int
+	length     int
 }
 
 func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
@@ -43,10 +47,12 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 	}
 	id = uuid.New()
 	queue := &RedisQueue{
+		config:     config,
 		client:     client,
 		id:         id,
 		timeoutVal: time.Duration(30) * time.Second,
 		retryTimes: 3,
+		length:     0,
 	}
 	return queue
 }
@@ -61,6 +67,10 @@ func (r *RedisQueue) buildQueuePrefix() string {
 
 func buildSession(id string) string {
 	return id + "|session"
+}
+
+func (r *RedisQueue) isQueueFull() bool {
+	return r.length >= r.config.MaxLength
 }
 
 func extractIDFromSession(session string) (string, error) {
@@ -110,6 +120,9 @@ func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool) {
 }
 
 func (r *RedisQueue) Push(e pq.QueueElement) error {
+	if r.isQueueFull() {
+		return errQueueFull
+	}
 	result := r.client.ZAdd(r.buildQueuePrefix(), redis.Z{
 		Score:  e.GetScore(),
 		Member: e.GetID(),
@@ -119,6 +132,7 @@ func (r *RedisQueue) Push(e pq.QueueElement) error {
 		log.Error(err)
 		return errRedis
 	}
+	r.length++
 	return nil
 }
 
@@ -167,6 +181,7 @@ func (r *RedisQueue) Ack(session string) error {
 		cancelChannelMap[session] <- true
 		delete(cancelChannelMap, session)
 	}
+	r.length--
 	return nil
 }
 
@@ -183,4 +198,8 @@ func (r *RedisQueue) GetRetryTimes(session string) (int, error) {
 		return 0, errParse
 	}
 	return int(times), nil
+}
+
+func (r *RedisQueue) GetQueueLength() int {
+	return r.length
 }
