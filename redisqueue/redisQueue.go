@@ -45,7 +45,6 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 	if config.ID != "" {
 		id = config.ID
 	}
-	id = uuid.New()
 	queue := &RedisQueue{
 		config:     config,
 		client:     client,
