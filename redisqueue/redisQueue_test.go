@@ -50,7 +50,9 @@ func (e Element) GetTimeout() int64 {
 
 func TestRedisQueue(t *testing.T) {
 	config := &RedisQueueConfig{
-		Addr: "127.0.0.1:6379",
+		Addr:      "127.0.0.1:6379",
+		ID:        "test",
+		MaxLength: 1000,
 	}
 	queue := NewRedisQueue(config)
 
