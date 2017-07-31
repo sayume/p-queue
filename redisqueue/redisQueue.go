@@ -90,7 +90,7 @@ func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool) {
 	case <-time.After(time.Duration(timeout) * time.Nanosecond):
 		// Close channel
 		close(c)
-		session := e.buildSession(e.GetID())
+		session := buildSession(e.GetID())
 		if cancelChannelMap[session] != nil {
 			delete(cancelChannelMap, session)
 		}
