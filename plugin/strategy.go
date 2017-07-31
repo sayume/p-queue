@@ -45,7 +45,7 @@ func (e *Element) GetScore() float64 {
 
 // Revise this method to implement custom timeout
 func (e *Element) GetTimeout() int64 {
-	return e.estimateTime * 2
+	return e.EstimateTime * 2
 }
 
 func NewElement() pq.QueueElement {
