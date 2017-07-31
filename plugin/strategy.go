@@ -37,14 +37,6 @@ func (e *Element) SetID(id string) {
 	e.id = id
 }
 
-func (e *Element) GetSession() string {
-	return e.session
-}
-
-func (e *Element) SetSession(session string) {
-	e.session = session
-}
-
 // Revise this method to implement custom algorithm
 func (e *Element) GetScore() float64 {
 	score := int64(e.Priority) * (e.CreateTime - pivotTime)

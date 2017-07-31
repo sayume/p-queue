@@ -83,7 +83,7 @@ func TestRedisQueue(t *testing.T) {
 		err := queue.Pop(element)
 		So(err, ShouldBeNil)
 		So(element.GetID(), ShouldEqual, "aaa")
-		err = queue.Ack(element.GetSession())
+		err = queue.Ack(element.GetID())
 		So(err, ShouldBeNil)
 	})
 
@@ -105,7 +105,7 @@ func TestRedisQueue(t *testing.T) {
 		err = queue.Pop(element3)
 		So(err, ShouldBeNil)
 		So(element3.GetID(), ShouldEqual, "bbb")
-		err = queue.Ack(element3.GetSession())
+		err = queue.Ack(element3.GetID())
 		So(err, ShouldBeNil)
 	})
 }

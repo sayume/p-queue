@@ -90,7 +90,7 @@ func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool) {
 	case <-time.After(time.Duration(timeout) * time.Nanosecond):
 		// Close channel
 		close(c)
-		session := e.GetSession()
+		session := e.buildSession(e.GetID())
 		if cancelChannelMap[session] != nil {
 			delete(cancelChannelMap, session)
 		}
@@ -151,7 +151,6 @@ func (r *RedisQueue) Pop(element pq.QueueElement) error {
 
 	// Use transaction to make sure every pop is an atomic exec.
 	session := buildSession(id)
-	element.SetSession(session)
 	pipe := r.client.TxPipeline()
 	pipe.ZRemRangeByRank(r.buildQueuePrefix(), 0, 0)
 	pipe.HSetNX(r.buildElementPrefix(), session, 0)
@@ -169,7 +168,8 @@ func (r *RedisQueue) Pop(element pq.QueueElement) error {
 	return nil
 }
 
-func (r *RedisQueue) Ack(session string) error {
+func (r *RedisQueue) Ack(id string) error {
+	session := buildSession(id)
 	result := r.client.HDel(r.buildElementPrefix(), session)
 	err := result.Err()
 	if err != nil {
@@ -184,7 +184,8 @@ func (r *RedisQueue) Ack(session string) error {
 	return nil
 }
 
-func (r *RedisQueue) GetRetryTimes(session string) (int, error) {
+func (r *RedisQueue) GetRetryTimes(id string) (int, error) {
+	session := buildSession(id)
 	result := r.client.HGet(r.buildElementPrefix(), session)
 	err := result.Err()
 	if err != nil {
