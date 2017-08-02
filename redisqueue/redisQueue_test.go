@@ -82,7 +82,7 @@ func TestRedisQueue(t *testing.T) {
 	Convey("Pop an element from queue and ack", t, func() {
 		var element QueueElement
 		element = &Element{}
-		err := queue.Pop(element)
+		_, err := queue.Pop(element)
 		So(err, ShouldBeNil)
 		So(element.GetID(), ShouldEqual, "aaa")
 		err = queue.Ack(element.GetID())
@@ -92,22 +92,32 @@ func TestRedisQueue(t *testing.T) {
 	Convey("An not acked element should be timeout", t, func() {
 		var element1 QueueElement
 		element1 = &Element{}
-		err := queue.Pop(element1)
+		ti, err := queue.Pop(element1)
 		So(err, ShouldBeNil)
 		So(element1.GetID(), ShouldEqual, "bbb")
 		var element2 QueueElement
 		element2 = &Element{}
-		err = queue.Pop(element2)
-		So(err, ShouldBeNil)
-		So(element2.GetID(), ShouldEqual, "")
-
-		<-time.After(35 * time.Second)
+		_, err = queue.Pop(element2)
+		So(err, ShouldNotBeNil)
+		<-ti
+		t.Log("Element is timeout at the first time.")
 		var element3 QueueElement
 		element3 = &Element{}
-		err = queue.Pop(element3)
+		ti, err = queue.Pop(element3)
 		So(err, ShouldBeNil)
 		So(element3.GetID(), ShouldEqual, "bbb")
-		err = queue.Ack(element3.GetID())
+		<-ti
+		t.Log("Element is timeout at the second time.")
+		var element4 QueueElement
+		element4 = &Element{}
+		ti, err = queue.Pop(element4)
 		So(err, ShouldBeNil)
+		So(element4.GetID(), ShouldEqual, "bbb")
+		<-ti
+		t.Log("Element is out of retry limit and remove.")
+		var element5 QueueElement
+		element5 = &Element{}
+		ti, err = queue.Pop(element5)
+		So(err, ShouldNotBeNil)
 	})
 }

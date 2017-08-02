@@ -17,6 +17,7 @@ var (
 	errParseSession  = errors.New("Invalid session.")
 	errParse         = errors.New("Parse data type error.")
 	errQueueFull     = errors.New("Queue is full.")
+	errQueueIsEmpty  = errors.New("Queue is empty.")
 	cancelChannelMap = make(map[string](chan bool))
 )
 
@@ -49,7 +50,7 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 		config:     config,
 		client:     client,
 		id:         id,
-		timeoutVal: time.Duration(30) * time.Second,
+		timeoutVal: time.Duration(1) * time.Second,
 		retryTimes: 3,
 		length:     0,
 	}
@@ -81,7 +82,8 @@ func extractIDFromSession(session string) (string, error) {
 	return id, nil
 }
 
-func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool) {
+func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool, timeoutChan chan bool) {
+	defer close(timeoutChan)
 	timeout := e.GetTimeout()
 	if r.timeoutVal.Nanoseconds() > e.GetTimeout() {
 		timeout = r.timeoutVal.Nanoseconds()
@@ -108,7 +110,14 @@ func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool) {
 			return
 		}
 		if times >= 3 {
+			result2 := r.client.HDel(r.buildElementPrefix(), session)
+			err = result2.Err()
+			if err != nil {
+				log.Error(err)
+				return
+			}
 			log.WithField("elementID", e.GetID()).Info("Element is out of retry limit, delete from queue.")
+			timeoutChan <- true
 			return
 		}
 		// Put the element back to the queue.
@@ -135,16 +144,16 @@ func (r *RedisQueue) Push(e pq.QueueElement) error {
 	return nil
 }
 
-func (r *RedisQueue) Pop(element pq.QueueElement) error {
+func (r *RedisQueue) Pop(element pq.QueueElement) (chan bool, error) {
 	result1 := r.client.ZRange(r.buildQueuePrefix(), 0, 0)
 	err := result1.Err()
 	if err != nil {
 		log.Error(err)
-		return errRedis
+		return nil, errRedis
 	}
 	values := result1.Val()
 	if len(values) == 0 {
-		return nil
+		return nil, errQueueIsEmpty
 	}
 	id := values[0]
 	element.SetID(id)
@@ -159,13 +168,14 @@ func (r *RedisQueue) Pop(element pq.QueueElement) error {
 	_, err = pipe.Exec()
 	if err != nil {
 		log.Error(err)
-		return errRedis
+		return nil, errRedis
 	}
 	cancelChannel := make(chan bool, 1)
-	go r.collectElement(element, cancelChannel)
+	timeoutChannel := make(chan bool, 1)
+	go r.collectElement(element, cancelChannel, timeoutChannel)
 	cancelChannelMap[session] = cancelChannel
 
-	return nil
+	return timeoutChannel, nil
 }
 
 func (r *RedisQueue) Ack(id string) error {
