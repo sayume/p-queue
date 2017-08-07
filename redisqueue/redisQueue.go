@@ -109,7 +109,7 @@ func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool, timeoutChan 
 			log.Error(err)
 			return
 		}
-		if times >= 3 {
+		if times > r.retryTimes {
 			result2 := r.client.HDel(r.buildElementPrefix(), session)
 			err = result2.Err()
 			if err != nil {
