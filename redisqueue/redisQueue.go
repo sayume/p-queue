@@ -50,7 +50,7 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 		config:     config,
 		client:     client,
 		id:         id,
-		timeoutVal: time.Duration(1) * time.Second,
+		timeoutVal: time.Duration(30) * time.Second,
 		retryTimes: 3,
 		length:     0,
 	}
