@@ -5,4 +5,5 @@ type QueueElement interface {
 	GetTimeout() int64
 	GetID() string
 	SetID(id string)
+	SetTimeout(timeout int64)
 }

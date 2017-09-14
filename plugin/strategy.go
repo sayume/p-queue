@@ -13,6 +13,7 @@ var (
 type Element struct {
 	id              string
 	session         string
+	timeout         int64
 	Priority        int       `json:"priority"`
 	CreateTime      int64     `json:"startTimestamp"`
 	EstimateTime    int64     `json:"estimateTime"`
@@ -43,9 +44,12 @@ func (e *Element) GetScore() float64 {
 	return float64(score)
 }
 
-// Revise this method to implement custom timeout
 func (e *Element) GetTimeout() int64 {
-	return e.EstimateTime * 2
+	return e.timeout
+}
+
+func (e *Element) SetTimeout(timeout int64) {
+	e.timeout = timeout
 }
 
 func NewElement() pq.QueueElement {

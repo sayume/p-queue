@@ -19,6 +19,7 @@ type Element struct {
 	priority              int
 	createTime            int64
 	estimateExecutionTime int64
+	timeout               int64
 }
 
 func (e *Element) GetID() string {
@@ -44,8 +45,12 @@ func (e *Element) GetScore() float64 {
 	return float64(e.priority) * float64(createTime)
 }
 
-func (e Element) GetTimeout() int64 {
-	return e.estimateExecutionTime * 2
+func (e *Element) GetTimeout() int64 {
+	return e.timeout
+}
+
+func (e *Element) SetTimeout(timeout int64) {
+	e.timeout = timeout
 }
 
 func TestRedisQueue(t *testing.T) {
@@ -61,16 +66,20 @@ func TestRedisQueue(t *testing.T) {
 		var element1 QueueElement
 		element1 = &Element{
 			id:                    "aaa",
+			session:               "",
 			priority:              1,
 			createTime:            time.Now().UnixNano(),
 			estimateExecutionTime: estimate.Nanoseconds(),
+			timeout:               int64(60 * 1000 * 1000 * 1000),
 		}
 		var element2 QueueElement
 		element2 = &Element{
 			id:                    "bbb",
+			session:               "",
 			priority:              1,
 			createTime:            time.Now().UnixNano(),
 			estimateExecutionTime: estimate.Nanoseconds(),
+			timeout:               int64(60 * 1000 * 1000 * 1000),
 		}
 
 		err := queue.Push(element1)

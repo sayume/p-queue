@@ -2,6 +2,7 @@ package redisqueue
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,6 +70,13 @@ func buildSession(id string) string {
 	return id + "|session"
 }
 
+func extractID(str string) (id string, timeout int64) {
+	array := strings.Split(str, "|")
+	id = array[0]
+	timeout, _ = strconv.ParseInt(array[1], 10, 64)
+	return
+}
+
 func (r *RedisQueue) isQueueFull() bool {
 	return r.length >= r.config.MaxLength
 }
@@ -133,7 +141,7 @@ func (r *RedisQueue) Push(e pq.QueueElement) error {
 	}
 	result := r.client.ZAdd(r.buildQueuePrefix(), redis.Z{
 		Score:  e.GetScore(),
-		Member: e.GetID(),
+		Member: e.GetID() + "|" + strconv.FormatInt(e.GetTimeout(), 10),
 	})
 	err := result.Err()
 	if err != nil {
@@ -155,8 +163,10 @@ func (r *RedisQueue) Pop(element pq.QueueElement) (chan bool, error) {
 	if len(values) == 0 {
 		return nil, errQueueIsEmpty
 	}
-	id := values[0]
+	str := values[0]
+	id, timeout := extractID(str)
 	element.SetID(id)
+	element.SetTimeout(timeout)
 
 	// Use transaction to make sure every pop is an atomic exec.
 	session := buildSession(id)
