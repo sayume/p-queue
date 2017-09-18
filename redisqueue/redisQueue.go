@@ -53,8 +53,15 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 		id:         id,
 		timeoutVal: time.Duration(30) * time.Second,
 		retryTimes: 3,
-		length:     0,
 	}
+	result := queue.client.LLen(queue.buildQueuePrefix())
+	err := result.Err()
+	if err != nil {
+		log.Error(err)
+		queue.length = 0
+	}
+	length := int(result.Val())
+	queue.length = length
 	return queue
 }
 
