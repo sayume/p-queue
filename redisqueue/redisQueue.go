@@ -34,7 +34,6 @@ type RedisQueue struct {
 	id         string
 	timeoutVal time.Duration
 	retryTimes int
-	length     int
 }
 
 func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
@@ -54,14 +53,6 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 		timeoutVal: time.Duration(30) * time.Second,
 		retryTimes: 3,
 	}
-	result := queue.client.LLen(queue.buildQueuePrefix())
-	err := result.Err()
-	if err != nil {
-		log.Error(err)
-		queue.length = 0
-	}
-	length := int(result.Val())
-	queue.length = length
 	return queue
 }
 
@@ -85,7 +76,7 @@ func extractID(str string) (id string, timeout int64) {
 }
 
 func (r *RedisQueue) isQueueFull() bool {
-	return r.length >= r.config.MaxLength
+	return r.GetQueueLength() >= r.config.MaxLength
 }
 
 func extractIDFromSession(session string) (string, error) {
@@ -155,7 +146,6 @@ func (r *RedisQueue) Push(e pq.QueueElement) error {
 		log.Error(err)
 		return errRedis
 	}
-	r.length++
 	return nil
 }
 
@@ -207,7 +197,6 @@ func (r *RedisQueue) Ack(id string) error {
 		cancelChannelMap[session] <- true
 		delete(cancelChannelMap, session)
 	}
-	r.length--
 	return nil
 }
 
@@ -228,5 +217,11 @@ func (r *RedisQueue) GetRetryTimes(id string) (int, error) {
 }
 
 func (r *RedisQueue) GetQueueLength() int {
-	return r.length
+	result := r.client.ZCard(r.buildQueuePrefix())
+	err := result.Err()
+	if err != nil {
+		log.Error(err)
+		return 0
+	}
+	return int(result.Val())
 }

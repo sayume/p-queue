@@ -70,7 +70,7 @@ func TestRedisQueue(t *testing.T) {
 			priority:              1,
 			createTime:            time.Now().UnixNano(),
 			estimateExecutionTime: estimate.Nanoseconds(),
-			timeout:               int64(60 * 1000 * 1000 * 1000),
+			timeout:               int64(10 * 1000 * 1000 * 1000),
 		}
 		var element2 QueueElement
 		element2 = &Element{
@@ -79,7 +79,7 @@ func TestRedisQueue(t *testing.T) {
 			priority:              1,
 			createTime:            time.Now().UnixNano(),
 			estimateExecutionTime: estimate.Nanoseconds(),
-			timeout:               int64(60 * 1000 * 1000 * 1000),
+			timeout:               int64(10 * 1000 * 1000 * 1000),
 		}
 
 		err := queue.Push(element1)
