@@ -70,7 +70,7 @@ func TestRedisQueue(t *testing.T) {
 			priority:              1,
 			createTime:            time.Now().UnixNano(),
 			estimateExecutionTime: estimate.Nanoseconds(),
-			timeout:               int64(10 * 1000 * 1000 * 1000),
+			timeout:               int64(1 * 1000 * 1000 * 1000),
 		}
 		var element2 QueueElement
 		element2 = &Element{
@@ -79,7 +79,7 @@ func TestRedisQueue(t *testing.T) {
 			priority:              1,
 			createTime:            time.Now().UnixNano(),
 			estimateExecutionTime: estimate.Nanoseconds(),
-			timeout:               int64(10 * 1000 * 1000 * 1000),
+			timeout:               int64(1 * 1000 * 1000 * 1000),
 		}
 
 		err := queue.Push(element1)
@@ -99,34 +99,33 @@ func TestRedisQueue(t *testing.T) {
 	})
 
 	Convey("An not acked element should be timeout", t, func() {
-		var element1 QueueElement
-		element1 = &Element{}
-		ti, err := queue.Pop(element1)
-		So(err, ShouldBeNil)
-		So(element1.GetID(), ShouldEqual, "bbb")
 		var element2 QueueElement
 		element2 = &Element{}
-		_, err = queue.Pop(element2)
-		So(err, ShouldNotBeNil)
-		<-ti
+		ti1, err := queue.Pop(element2)
+		So(err, ShouldBeNil)
+		times1 := <-ti1
+		t.Log(times1)
 		t.Log("Element is timeout at the first time.")
 		var element3 QueueElement
 		element3 = &Element{}
-		ti, err = queue.Pop(element3)
+		ti2, err := queue.Pop(element3)
 		So(err, ShouldBeNil)
 		So(element3.GetID(), ShouldEqual, "bbb")
-		<-ti
+		times2 := <-ti2
+		t.Log(times2)
 		t.Log("Element is timeout at the second time.")
 		var element4 QueueElement
 		element4 = &Element{}
-		ti, err = queue.Pop(element4)
+		ti3, err := queue.Pop(element4)
 		So(err, ShouldBeNil)
 		So(element4.GetID(), ShouldEqual, "bbb")
-		<-ti
-		t.Log("Element is out of retry limit and remove.")
+		times3 := <-ti3
+		t.Log(times3)
+		t.Log("Element is timeout at the third time.")
 		var element5 QueueElement
 		element5 = &Element{}
-		ti, err = queue.Pop(element5)
+		_, err = queue.Pop(element5)
+		t.Log(element5.GetID())
 		So(err, ShouldNotBeNil)
 	})
 }

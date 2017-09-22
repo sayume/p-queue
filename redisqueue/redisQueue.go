@@ -50,7 +50,7 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 		config:     config,
 		client:     client,
 		id:         id,
-		timeoutVal: time.Duration(30) * time.Second,
+		timeoutVal: time.Duration(1) * time.Second,
 		retryTimes: 3,
 	}
 	return queue
@@ -88,7 +88,7 @@ func extractIDFromSession(session string) (string, error) {
 	return id, nil
 }
 
-func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool, timeoutChan chan bool) {
+func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool, timeoutChan chan int) {
 	defer close(timeoutChan)
 	timeout := e.GetTimeout()
 	if r.timeoutVal.Nanoseconds() > e.GetTimeout() {
@@ -107,27 +107,33 @@ func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool, timeoutChan 
 		err := result1.Err()
 		if err != nil {
 			log.Error(err)
-			// Element already acked by other client, just ignore.
+			// Element already acked by another client, just ignore.
+			timeoutChan <- -1
 			return
 		}
 		times, err := result1.Int64()
 		if err != nil {
 			log.Error(err)
+			// Redis error, just ignore.
+			timeoutChan <- -1
 			return
 		}
-		if times > int64(r.retryTimes) {
+		if times >= int64(r.retryTimes) {
 			result2 := r.client.HDel(r.buildElementPrefix(), session)
 			err = result2.Err()
 			if err != nil {
 				log.Error(err)
+				timeoutChan <- -1
 				return
 			}
 			log.WithField("elementID", e.GetID()).Info("Element is out of retry limit, delete from queue.")
-			timeoutChan <- true
+			timeoutChan <- int(times)
 			return
 		}
 		// Put the element back to the queue.
 		r.Push(e)
+		timeoutChan <- int(times)
+		return
 	case <-c:
 		return
 	}
@@ -149,7 +155,7 @@ func (r *RedisQueue) Push(e pq.QueueElement) error {
 	return nil
 }
 
-func (r *RedisQueue) Pop(element pq.QueueElement) (chan bool, error) {
+func (r *RedisQueue) Pop(element pq.QueueElement) (chan int, error) {
 	result1 := r.client.ZRange(r.buildQueuePrefix(), 0, 0)
 	err := result1.Err()
 	if err != nil {
@@ -178,7 +184,7 @@ func (r *RedisQueue) Pop(element pq.QueueElement) (chan bool, error) {
 		return nil, errRedis
 	}
 	cancelChannel := make(chan bool, 1)
-	timeoutChannel := make(chan bool, 1)
+	timeoutChannel := make(chan int, 1)
 	go r.collectElement(element, cancelChannel, timeoutChannel)
 	cancelChannelMap[session] = cancelChannel
 
