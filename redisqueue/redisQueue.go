@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -19,7 +20,10 @@ var (
 	errParse         = errors.New("Parse data type error.")
 	errQueueFull     = errors.New("Queue is full.")
 	errQueueIsEmpty  = errors.New("Queue is empty.")
+	errQueueIsLocked = errors.New("Queue is locked by another instance.")
+	channelMapLock   = &sync.Mutex{}
 	cancelChannelMap = make(map[string](chan bool))
+	lockTTL          = 10 * time.Millisecond
 )
 
 type RedisQueueConfig struct {
@@ -88,6 +92,27 @@ func extractIDFromSession(session string) (string, error) {
 	return id, nil
 }
 
+func (r *RedisQueue) lock() bool {
+	isSet, err := r.client.SetNX("redisqueue:lock", "true", lockTTL).Result()
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+	if isSet {
+		return true
+	}
+	return false
+}
+
+func (r *RedisQueue) Unlock() {
+	_, err := r.client.Del("redisqueue:lock").Result()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	return
+}
+
 func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool, timeoutChan chan int) {
 	defer close(timeoutChan)
 	timeout := e.GetTimeout()
@@ -99,9 +124,11 @@ func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool, timeoutChan 
 		// Close channel
 		close(c)
 		session := buildSession(e.GetID())
+		channelMapLock.Lock()
 		if cancelChannelMap[session] != nil {
 			delete(cancelChannelMap, session)
 		}
+		channelMapLock.Unlock()
 		// Re-push element to the queue
 		result1 := r.client.HGet(r.buildElementPrefix(), session)
 		err := result1.Err()
@@ -156,6 +183,12 @@ func (r *RedisQueue) Push(e pq.QueueElement) error {
 }
 
 func (r *RedisQueue) Pop(element pq.QueueElement) (chan int, error) {
+	// Lock queue to prevent element retrieve by another client
+	if !r.lock() {
+		return nil, errQueueIsLocked
+	}
+	defer r.Unlock()
+
 	result1 := r.client.ZRange(r.buildQueuePrefix(), 0, 0)
 	err := result1.Err()
 	if err != nil {
@@ -186,7 +219,9 @@ func (r *RedisQueue) Pop(element pq.QueueElement) (chan int, error) {
 	cancelChannel := make(chan bool, 1)
 	timeoutChannel := make(chan int, 1)
 	go r.collectElement(element, cancelChannel, timeoutChannel)
+	channelMapLock.Lock()
 	cancelChannelMap[session] = cancelChannel
+	channelMapLock.Unlock()
 
 	return timeoutChannel, nil
 }
@@ -199,10 +234,12 @@ func (r *RedisQueue) Ack(id string) error {
 		log.Error(err)
 		return errRedis
 	}
+	channelMapLock.Lock()
 	if cancelChannelMap[session] != nil {
 		cancelChannelMap[session] <- true
 		delete(cancelChannelMap, session)
 	}
+	channelMapLock.Unlock()
 	return nil
 }
 
