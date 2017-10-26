@@ -27,24 +27,28 @@ var (
 )
 
 type RedisQueueConfig struct {
-	Addr      string
+	Addrs     []string
 	ID        string
 	MaxLength int
 }
 
 type RedisQueue struct {
 	config     *RedisQueueConfig
-	client     *redis.Client
+	client     *redis.ClusterClient
 	id         string
 	timeoutVal time.Duration
 	retryTimes int
 }
 
 func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
-	client := redis.NewClient(&redis.Options{
-		Addr:     config.Addr,
+	// client := redis.NewClient(&redis.Options{
+	// 	Addr:     config.Addr,
+	// 	Password: "",
+	// 	DB:       0,
+	// })
+	client := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:    config.Addrs,
 		Password: "",
-		DB:       0,
 	})
 	id := uuid.NewUUID().String()
 	if config.ID != "" {
