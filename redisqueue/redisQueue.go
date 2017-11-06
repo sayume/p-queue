@@ -234,7 +234,7 @@ func (r *RedisQueue) Pop(element pq.QueueElement) (chan int, error) {
 
 func (r *RedisQueue) Ack(id string) error {
 	session := buildSession(id)
-	result := r.client.Del(r.buildElementPrefix(id), session)
+	result := r.client.Del(r.buildElementPrefix(id))
 	err := result.Err()
 	if err != nil {
 		log.Error(err)
