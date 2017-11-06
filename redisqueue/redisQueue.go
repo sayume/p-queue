@@ -64,8 +64,8 @@ func NewRedisQueue(config *RedisQueueConfig) *RedisQueue {
 	return queue
 }
 
-func (r *RedisQueue) buildElementPrefix() string {
-	return r.id + ":element"
+func (r *RedisQueue) buildElementPrefix(id string) string {
+	return r.id + ":element:" + id
 }
 
 func (r *RedisQueue) buildQueuePrefix() string {
@@ -128,13 +128,15 @@ func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool, timeoutChan 
 		// Close channel
 		close(c)
 		session := buildSession(e.GetID())
+		id := e.GetID()
 		channelMapLock.Lock()
 		if cancelChannelMap[session] != nil {
 			delete(cancelChannelMap, session)
 		}
 		channelMapLock.Unlock()
 		// Re-push element to the queue
-		result1 := r.client.HGet(r.buildElementPrefix(), session)
+		//result1 := r.client.HGet(r.buildElementPrefix(), session)
+		result1 := r.client.Get(r.buildElementPrefix(id))
 		err := result1.Err()
 		if err != nil {
 			log.Error(err)
@@ -150,14 +152,14 @@ func (r *RedisQueue) collectElement(e pq.QueueElement, c chan bool, timeoutChan 
 			return
 		}
 		if times >= int64(r.retryTimes) {
-			result2 := r.client.HDel(r.buildElementPrefix(), session)
+			result2 := r.client.Del(r.buildElementPrefix(id))
 			err = result2.Err()
 			if err != nil {
 				log.Error(err)
 				timeoutChan <- -1
 				return
 			}
-			log.WithField("elementID", e.GetID()).Info("Element is out of retry limit, delete from queue.")
+			log.WithField("elementID", id).Info("Element is out of retry limit, delete from queue.")
 			timeoutChan <- int(times)
 			return
 		}
@@ -212,9 +214,9 @@ func (r *RedisQueue) Pop(element pq.QueueElement) (chan int, error) {
 	session := buildSession(id)
 	pipe := r.client.TxPipeline()
 	pipe.ZRemRangeByRank(r.buildQueuePrefix(), 0, 0)
-	pipe.HSetNX(r.buildElementPrefix(), session, 0)
-	pipe.Expire(r.buildElementPrefix(), 24*time.Hour)
-	pipe.HIncrBy(r.buildElementPrefix(), session, 1)
+	//pipe.HSetNX(r.buildElementPrefix(), session, 0)
+	pipe.SetNX(r.buildElementPrefix(id), 0, 24*time.Hour)
+	pipe.IncrBy(r.buildElementPrefix(id), 1)
 	_, err = pipe.Exec()
 	if err != nil {
 		log.Error(err)
@@ -232,7 +234,7 @@ func (r *RedisQueue) Pop(element pq.QueueElement) (chan int, error) {
 
 func (r *RedisQueue) Ack(id string) error {
 	session := buildSession(id)
-	result := r.client.HDel(r.buildElementPrefix(), session)
+	result := r.client.Del(r.buildElementPrefix(id), session)
 	err := result.Err()
 	if err != nil {
 		log.Error(err)
@@ -248,8 +250,7 @@ func (r *RedisQueue) Ack(id string) error {
 }
 
 func (r *RedisQueue) GetRetryTimes(id string) (int, error) {
-	session := buildSession(id)
-	result := r.client.HGet(r.buildElementPrefix(), session)
+	result := r.client.Get(r.buildElementPrefix(id))
 	err := result.Err()
 	if err != nil {
 		log.Error(err)
